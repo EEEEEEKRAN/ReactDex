@@ -1,102 +1,178 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import Navbar from "../components/Navbar";
+import PokemonCard from "../components/PokemonCard";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [pokemons, setPokemons] = useState([]);
+  const [allTypes, setAllTypes] = useState([]);
+  const [nameFilter, setNameFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+  useEffect(() => {
+    const fetchTypes = async () => {
+      try {
+        const response = await fetch("https://nestjs-pokedex-api.vercel.app/types");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setAllTypes(data);
+      } catch (e) {
+        console.error("Failed to fetch types:", e);
+      }
+    };
+    fetchTypes();
+  }, []);
+
+  const fetchPokemonsData = useCallback(async (currentPage, isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setIsLoading(true);
+    } else {
+      setIsFetchingMore(true);
+    }
+    setError(null);
+
+    try {
+      const response = await fetch(`https://nestjs-pokedex-api.vercel.app/pokemons?limit=${limit}&page=${currentPage}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      const newPokemons = (data.data || data || []).map(pokemon => ({
+        ...pokemon,
+        sprites: pokemon.sprites || { front_default: null },
+      }));
+
+      setPokemons(prevPokemons => isInitialLoad ? newPokemons : [...prevPokemons, ...newPokemons]);
+      setHasMore(newPokemons.length === limit);
+
+    } catch (e) {
+      console.error("Failed to fetch pokemons:", e);
+      setError(e.message);
+      setHasMore(false);
+    } finally {
+      if (isInitialLoad) {
+        setIsLoading(false);
+      } else {
+        setIsFetchingMore(false);
+      }
+    }
+  }, [limit]);
+
+
+  useEffect(() => {
+    fetchPokemonsData(1, true);
+  }, [fetchPokemonsData]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 200 &&
+        hasMore &&        
+        !isFetchingMore && 
+        !isLoading        
+      ) {
+        setPage(prevPage => prevPage + 1);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [hasMore, isFetchingMore, isLoading]);
+
+  useEffect(() => {
+    if (page > 1) {
+      fetchPokemonsData(page, false);
+    }
+  }, [page, fetchPokemonsData]);
+
+  useEffect(() => {
+    if (nameFilter === "" && typeFilter.length === 0) {
+      console.log("Aucun filtre actif");
+    }
+  }, [nameFilter, typeFilter]);
+
+  useEffect(() => {
+    if (error) {
+      alert("Une erreur est survenue : " + error);
+    }
+  }, [error]);
+
+  const handleNameFilterChange = useCallback((name) => {
+    setNameFilter(name.toLowerCase());
+  }, []);
+
+  const handleTypeFilterChange = useCallback((types) => {
+    setTypeFilter(types);
+  }, []);
+
+  const filteredPokemons = pokemons.filter(pokemon => {
+    const nameMatch = pokemon.name.toLowerCase().includes(nameFilter);
+    const typeMatch = typeFilter.length === 0 ||
+                      (pokemon.types && pokemon.types.some(pt => typeFilter.includes(pt.id)));
+    return nameMatch && typeMatch;
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <Navbar
+        onNameFilter={handleNameFilterChange}
+        onTypeFilter={handleTypeFilterChange}
+        types={allTypes}
+      />
+      <main className="p-4 sm:p-6 md:p-8">
+        {isLoading && ( 
+          <div className="flex justify-center items-center h-64">
+            <p className="text-2xl font-semibold text-gray-700">Chargement des Pokémon...</p>
+          </div>
+        )}
+        {error && (
+          <div className="flex justify-center items-center h-64">
+            <p className="text-2xl font-semibold text-red-600">Erreur: {error}</p>
+          </div>
+        )}
+
+        {}
+        {!isLoading && !error && (
+          <>
+            {filteredPokemons.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5">
+                {filteredPokemons.map((pokemon) => (
+                  <PokemonCard key={`${pokemon.pokedexId}-${pokemon.name}`} pokemon={pokemon} />
+                ))}
+              </div>
+            ) : (
+              !isFetchingMore &&
+              <div className="col-span-full flex justify-center items-center h-64">
+                <p className="text-2xl font-semibold text-gray-700">
+                  {pokemons.length === 0 ? "Aucun Pokémon trouvé pour le moment." : "Aucun Pokémon ne correspond à votre recherche."}
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {isFetchingMore && (
+          <div className="flex justify-center items-center py-8">
+            <p className="text-xl font-semibold text-gray-700">Chargement de plus de Pokémon...</p>
+          </div>
+        )}
+        {!hasMore && !isLoading && !isFetchingMore && pokemons.length > 0 && (
+           <div className="flex justify-center items-center py-8">
+            <p className="text-xl font-semibold text-gray-500">Vous avez atteint la fin de la liste.</p>
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      <footer className="text-center py-8 text-gray-600 text-sm">
+        Pokédex App - Créé avec Next.js et Tailwind CSS
       </footer>
     </div>
   );
